@@ -2,28 +2,28 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/snowflakedb/gosnowflake"
 )
 
 type Call struct {
-	callId            string `gorm:"primaryKey" json:"callId"`
-	startTime         string `json:"startTime"`
-	endtime           string `json:"endTime"`
-	answerTime        string `json:"answerTime"`
-	duration          int    `json:"duration"`
-	callingNumber     string `json:"callingNumber"`
-	callingNumberType string `json:"callingNumberType"`
-	calledNumber      string `json:"calledNumber"`
-	calledNumberType  string `json:"calledNumberType"`
-	callDirection     string `json:"callDirection"`
-	postDialDelay     string `json:"postDialDelay"`
-	callType          string `json:"callType"`
-	callResult        string `json:"callResult"`
-	sipResponseCode   string `json:"sipResponseCode"`
+	CallId            string `json:"callId"`
+	StartTime         string `json:"startTime"`
+	EndTime           string `json:"endTime"`
+	AnswerTime        string `json:"answerTime"`
+	Duration          int    `json:"duration"`
+	CallingNumber     string `json:"callingNumber"`
+	CallingNumberType string `json:"callingNumberType"`
+	CalledNumber      string `json:"calledNumber"`
+	CalledNumberType  string `json:"calledNumberType"`
+	CallDirection     string `json:"callDirection"`
+	PostDialDelay     int    `json:"postDialDelay"`
+	CallType          string `json:"callType"`
+	CallResult        string `json:"callResult"`
+	SipResponseCode   string `json:"sipResponseCode"`
 }
 
 // type dbString struct{
@@ -31,49 +31,57 @@ type Call struct {
 // 	DBSource string 'mapstructure: "DBSource"'
 // }
 type DBHandler struct {
-	db *sql.DB
+	db     *sql.DB
+	result Call
 }
 
 func (this *DBHandler) getCall(c *gin.Context) {
 	callId := c.Params.ByName("callId")
 	accountId := c.Params.ByName("accoundId")
-	row := this.db.QueryRow(
-		fmt.Sprintf(
-			"SELECT * FROM calls WHERE %s=? AND %s=?",
-			callId,
-			startTime,
-			endtime,
-			answerTime,
-			duration,
-			callingNumber,
-			callingNumberType,
-			calledNumber,
-			calledNumberType,
-			callDirection,
-			postDialDelay,
-			callType,
-			callResult,
-			sipResponseCode,
-		),
+	row := this.db.QueryRow("SELECT * FROM calls WHERE %s=? AND %s=?",
 		callId,
 		accountId,
 	)
-	var retFirstName, retLastName string
-	var retAge uint
+
+	///
+	var retCallId,
+		retEndTime,
+		retAnswerTime,
+		retStartTime,
+		retCallingNumber,
+		retCallingNumberType,
+		retCalledNumber,
+		retCalledNumberType,
+		retCallDirection,
+		retCallType,
+		retCallResult,
+		retSipResponseCode string
+	var retDuration,
+		retPostDialDelay uint
 	if err := row.Scan(
-		&retFirstName,
-		&retLastName,
-		&retAge); err != nil {
-		return err
+		&retCallId,
+		&retEndTime,
+		&retAnswerTime,
+		&retDuration,
+		&retStartTime,
+		&retCallingNumber,
+		&retCallingNumberType,
+		&retCalledNumber,
+		&retCalledNumberType,
+		&retCallDirection,
+		&retPostDialDelay,
+		&retCallType,
+		&retCallResult,
+		&retSipResponseCode); err != nil {
+		return
 	}
-	result.FirstName = retFirstName
-	result.LastName = retLastName
-	result.Age = retAge
-	return nil
+
+	c.IndentedJSON(http.StatusAccepted, retCallType)
+	return
 }
 
 func main() {
-	connStr = ""
+	connStr := "mbronson:Gearmonkey1!@lv67112.us-east-2.aws/call_search/public"
 	db, err := sql.Open("snowflake", connStr)
 	if err != nil {
 		log.Fatal(err)
@@ -81,7 +89,8 @@ func main() {
 	Handler := new(DBHandler)
 	Handler.db = db
 	router := gin.Default()
-	router.GET("/calls", Handler.getCalls)
+	//router.GET("/calls", Handler.getCalls)
 	router.GET("/accounts/:accountId/calls/:callId", Handler.getCall)
-	router.Run("https://insights.bandwidth.com/api/v1.beta/voice")
+	router.Run(":8085")
+	//https://insights.bandwidth.com/api/v1.beta/voice
 }
