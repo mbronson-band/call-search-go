@@ -4,42 +4,43 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	_ "github.com/snowflakedb/gosnowflake"
 )
 
 type Call struct {
 	CallId            sql.NullString `json:"callId"`
-	StartTime         sql.NullString `json:"startTime"`
-	EndTime           sql.NullString `json:"endTime"`
-	AnswerTime        sql.NullString `json:"answerTime"`
-	Duration          sql.NullString `json:"duration"`
+	StartTime         sql.NullTime   `json:"startTime"`
+	EndTime           sql.NullTime   `json:"endTime"`
+	Duration          sql.NullInt64  `json:"duration"`
 	CallingNumber     sql.NullString `json:"callingNumber"`
 	CallingNumberType sql.NullString `json:"callingNumberType"`
 	CalledNumber      sql.NullString `json:"calledNumber"`
 	CalledNumberType  sql.NullString `json:"calledNumberType"`
 	CallDirection     sql.NullString `json:"callDirection"`
-	PostDialDelay     sql.NullString `json:"postDialDelay"`
+	PostDialDelay     sql.NullInt64  `json:"postDialDelay"`
 	CallType          sql.NullString `json:"callType"`
 	CallResult        sql.NullString `json:"callResult"`
 	SipResponseCode   sql.NullString `json:"sipResponseCode"`
 }
 type Call_Val struct {
-	CallId            string `json:"callId"`
-	StartTime         string `json:"startTime"`
-	EndTime           string `json:"endTime"`
-	AnswerTime        string `json:"answerTime"`
-	Duration          string `json:"duration"`
-	CallingNumber     string `json:"callingNumber"`
-	CallingNumberType string `json:"callingNumberType"`
-	CalledNumber      string `json:"calledNumber"`
-	CalledNumberType  string `json:"calledNumberType"`
-	CallDirection     string `json:"callDirection"`
-	PostDialDelay     string `json:"postDialDelay"`
-	CallType          string `json:"callType"`
-	CallResult        string `json:"callResult"`
-	SipResponseCode   string `json:"sipResponseCode"`
+	CallId            string    `json:"callId"`
+	StartTime         time.Time `json:"startTime"`
+	EndTime           time.Time `json:"endTime"`
+	Duration          int64     `json:"duration"`
+	CallingNumber     string    `json:"callingNumber"`
+	CallingNumberType string    `json:"callingNumberType"`
+	CalledNumber      string    `json:"calledNumber"`
+	CalledNumberType  string    `json:"calledNumberType"`
+	CallDirection     string    `json:"callDirection"`
+	PostDialDelay     int64     `json:"postDialDelay"`
+	CallType          string    `json:"callType"`
+	CallResult        string    `json:"callResult"`
+	SipResponseCode   string    `json:"sipResponseCode"`
 }
 
 // type dbString struct{
@@ -66,7 +67,6 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 	callId := c.Query("callId")
 	startTime := c.Query("startTime")
 	endTime := c.Query("endTime")
-	answerTime := c.Query("answerTime")
 	duration := c.Query("duration")
 	callingNumber := c.Query("callingNumber")
 	callingNumberType := c.Query("callingNumberType")
@@ -77,17 +77,15 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 	callType := c.Query("callType")
 	callResult := c.Query("callResult")
 	sipResponseCode := c.Query("sipResponseCode")
-	rows, err := this.db.Query("SELECT * FROM call_logs WHERE (accountid=? or ? is null) and (callid=? or ? is null) and (starttime=? or ? is null) and (endtime=? or ? is null) and (answertime=? or ? is null) and (duration=? or ? is null) and (callingnumber=? or ? is null) and (callingnumbertype=? or ? is null) and (callednumber=? or ? is null) and (callednumbertype=? or ? is null) and (calldirection=? or ? is null) and (postdialdelay=? or ? is null) and (calltype=? or ? is null) and (callresult=? or ? is null) and (sipresponsecode=? or ? is null)",
+	rows, err := this.db.Query("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_durtion_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code  FROM correlated_cdr_search_v3_vw WHERE (customer_id=? or ? is null) and (unique_record_id=? or ? is null) and (customer_sbc_answer_time=? or ? is null) and (customer_sbc_disconnect_time=? or ? is null) and (customer_sbc_call_duration_in_milliseconds=? or ? is null) and (calling_number=? or ? is null) and (calling_number_type=? or ? is null) and (called_number=? or ? is null) and (called_number_type=? or ? is null) and (call_direction=? or ? is null) and (customer_sbc_post_dial_delay_in_milliseconds=? or ? is null) and (call_type=? or ? is null) and (call_result=? or ? is null) and (sip_response_code=? or ? is null)",
 		NewNullString(accountId),
 		NewNullString(accountId),
 		NewNullString(callId),
 		NewNullString(callId),
-		NewNullString(startTime),
-		NewNullString(startTime),
-		NewNullString(endTime),
-		NewNullString(endTime),
-		NewNullString(answerTime),
-		NewNullString(answerTime),
+		startTime,
+		startTime,
+		endTime,
+		endTime,
 		NewNullString(duration),
 		NewNullString(duration),
 		NewNullString(callingNumber),
@@ -109,8 +107,8 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 		NewNullString(sipResponseCode),
 		NewNullString(sipResponseCode))
 	if err != nil {
-		c.String(http.StatusBadRequest, "Bad Request")
-
+		c.String(http.StatusOK, "No Results")
+		log.Fatal(err)
 	}
 
 	var allCalls []Call_Val
@@ -121,7 +119,6 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 			&call.CallId,
 			&call.StartTime,
 			&call.EndTime,
-			&call.AnswerTime,
 			&call.Duration,
 			&call.CallingNumber,
 			&call.CallingNumberType,
@@ -133,35 +130,39 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 			&call.CallResult,
 			&call.SipResponseCode,
 			&AccountId); err != nil {
-			c.String(http.StatusBadRequest, "Badder Request")
+			log.Fatal(err)
+			if sql.ErrNoRows == err {
+				c.String(http.StatusOK, "No Results")
+			} else {
+				c.String(http.StatusBadRequest, "BadRequest")
+			}
 
 		}
 		call_val := Call_Val{
 			call.CallId.String,
-			call.StartTime.String,
-			call.EndTime.String,
-			call.AnswerTime.String,
-			call.Duration.String,
+			call.StartTime.Time,
+			call.EndTime.Time,
+			call.Duration.Int64,
 			call.CallingNumber.String,
 			call.CallingNumberType.String,
 			call.CalledNumber.String,
 			call.CalledNumberType.String,
 			call.CallDirection.String,
-			call.PostDialDelay.String,
+			call.PostDialDelay.Int64,
 			call.CallType.String,
 			call.CallResult.String,
 			call.SipResponseCode.String,
 		}
 		allCalls = append(allCalls, call_val)
 	}
-	c.IndentedJSON(http.StatusAccepted, allCalls)
+	c.IndentedJSON(http.StatusOK, allCalls)
 
 }
 
 func (this *DBHandler) getCall(c *gin.Context) {
 	callId := c.Params.ByName("callId")
 	accountId := c.Params.ByName("accountId")
-	row := this.db.QueryRow("SELECT * FROM call_logs WHERE callid=? AND accountid=?",
+	row := this.db.QueryRow("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_durtion_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code FROM correlated_cdr_search_v3_vw WHERE unique_record_id=? AND customer_id=?",
 		callId,
 		accountId,
 	)
@@ -171,7 +172,6 @@ func (this *DBHandler) getCall(c *gin.Context) {
 		&call.CallId,
 		&call.StartTime,
 		&call.EndTime,
-		&call.AnswerTime,
 		&call.Duration,
 		&call.CallingNumber,
 		&call.CallingNumberType,
@@ -183,30 +183,41 @@ func (this *DBHandler) getCall(c *gin.Context) {
 		&call.CallResult,
 		&call.SipResponseCode,
 		&AccountId); err != nil {
-		c.String(http.StatusBadRequest, "Bad Request")
+		if sql.ErrNoRows == err {
+			c.String(http.StatusOK, "No Results")
+		} else {
+			c.String(http.StatusBadRequest, "BadRequest")
+		}
+
 	}
 	call_val := Call_Val{
 		call.CallId.String,
-		call.StartTime.String,
-		call.EndTime.String,
-		call.AnswerTime.String,
-		call.Duration.String,
+		call.StartTime.Time,
+		call.EndTime.Time,
+		call.Duration.Int64,
 		call.CallingNumber.String,
 		call.CallingNumberType.String,
 		call.CalledNumber.String,
 		call.CalledNumberType.String,
 		call.CallDirection.String,
-		call.PostDialDelay.String,
+		call.PostDialDelay.Int64,
 		call.CallType.String,
 		call.CallResult.String,
 		call.SipResponseCode.String,
 	}
-	c.IndentedJSON(http.StatusAccepted, call_val)
+	c.IndentedJSON(http.StatusOK, call_val)
 }
 
 func main() {
-	connStr := "milesbronson:Gearmonkey1!@lv67112.us-east-2.aws/call_search/public"
-	db, err := sql.Open("snowflake", connStr)
+	err := godotenv.Load(".env")
+
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
+
+	database := os.Getenv("DATABASE")
+	connStr := os.Getenv("CONNECTION_STRING")
+	db, err := sql.Open(database, connStr)
 	if err != nil {
 		log.Fatal(err)
 	}
