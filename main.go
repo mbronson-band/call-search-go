@@ -77,15 +77,15 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 	callType := c.Query("callType")
 	callResult := c.Query("callResult")
 	sipResponseCode := c.Query("sipResponseCode")
-	rows, err := this.db.Query("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_durtion_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code  FROM correlated_cdr_search_v3_vw WHERE (customer_id=? or ? is null) and (unique_record_id=? or ? is null) and (customer_sbc_answer_time=? or ? is null) and (customer_sbc_disconnect_time=? or ? is null) and (customer_sbc_call_duration_in_milliseconds=? or ? is null) and (calling_number=? or ? is null) and (calling_number_type=? or ? is null) and (called_number=? or ? is null) and (called_number_type=? or ? is null) and (call_direction=? or ? is null) and (customer_sbc_post_dial_delay_in_milliseconds=? or ? is null) and (call_type=? or ? is null) and (call_result=? or ? is null) and (sip_response_code=? or ? is null)",
+	rows, err := this.db.Query("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_duration_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code  FROM correlated_cdr_search_v3_vw WHERE (customer_id=? or ? is null) and (unique_record_id=? or ? is null) and (customer_sbc_answer_time=? or ? is null) and (customer_sbc_disconnect_time=? or ? is null) and (customer_sbc_call_duration_in_milliseconds=? or ? is null) and (calling_number=? or ? is null) and (calling_number_type=? or ? is null) and (called_number=? or ? is null) and (called_number_type=? or ? is null) and (call_direction=? or ? is null) and (customer_sbc_post_dial_delay_in_milliseconds=? or ? is null) and (call_type=? or ? is null) and (call_result=? or ? is null) and (sip_response_code=? or ? is null) LIMIT 100",
 		NewNullString(accountId),
 		NewNullString(accountId),
 		NewNullString(callId),
 		NewNullString(callId),
-		startTime,
-		startTime,
-		endTime,
-		endTime,
+		NewNullString(startTime),
+		NewNullString(startTime),
+		NewNullString(endTime),
+		NewNullString(endTime),
 		NewNullString(duration),
 		NewNullString(duration),
 		NewNullString(callingNumber),
@@ -114,7 +114,6 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 	var allCalls []Call_Val
 	for rows.Next() {
 		var call Call
-		var AccountId sql.NullString
 		if err := rows.Scan(
 			&call.CallId,
 			&call.StartTime,
@@ -128,8 +127,7 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 			&call.PostDialDelay,
 			&call.CallType,
 			&call.CallResult,
-			&call.SipResponseCode,
-			&AccountId); err != nil {
+			&call.SipResponseCode); err != nil {
 			log.Fatal(err)
 			if sql.ErrNoRows == err {
 				c.String(http.StatusOK, "No Results")
@@ -162,11 +160,10 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 func (this *DBHandler) getCall(c *gin.Context) {
 	callId := c.Params.ByName("callId")
 	accountId := c.Params.ByName("accountId")
-	row := this.db.QueryRow("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_durtion_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code FROM correlated_cdr_search_v3_vw WHERE unique_record_id=? AND customer_id=?",
+	row := this.db.QueryRow("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_duration_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code FROM correlated_cdr_search_v3_vw WHERE unique_record_id=? AND customer_id=? LIMIT 100",
 		callId,
 		accountId,
 	)
-	var AccountId sql.NullString
 	var call Call
 	if err := row.Scan(
 		&call.CallId,
@@ -181,8 +178,7 @@ func (this *DBHandler) getCall(c *gin.Context) {
 		&call.PostDialDelay,
 		&call.CallType,
 		&call.CallResult,
-		&call.SipResponseCode,
-		&AccountId); err != nil {
+		&call.SipResponseCode); err != nil {
 		if sql.ErrNoRows == err {
 			c.String(http.StatusOK, "No Results")
 		} else {
