@@ -2,9 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -61,6 +63,44 @@ func NewNullString(s string) sql.NullString {
 	}
 }
 
+func parseTime(time string) (exact, lte, gte string) {
+	if len(time) != 0 {
+		if strings.Contains(time, "gte") && strings.Contains(time, "lte") {
+			parts := strings.Split(time, ",")
+			param := parts[0][:4]
+			parts[0] = parts[0][4:]
+			parts[1] = parts[1][4:]
+			if strings.Contains(param, "gte") {
+				lte = parts[0]
+				gte = parts[1]
+			} else {
+				gte = parts[0]
+				lte = parts[1]
+			}
+
+		} else if strings.Contains(time, "lte") {
+			time = strings.ReplaceAll(time, "lte:", "")
+			fmt.Println(time)
+			lte = time
+		} else if strings.Contains(time, "gte") {
+			time = strings.ReplaceAll(time, "gte:", "")
+			gte = time
+		} else {
+			exact = time
+		}
+		return
+	}
+	if !(len(lte) == 0 && len(gte) == 0) {
+		if len(lte) == 0 {
+			lte = "0001-01-01T00:00:00Z"
+		}
+		if len(gte) == 0 {
+			gte = "9999-12-31T23:59:59Z"
+		}
+	}
+	return
+}
+
 func (this *DBHandler) getCalls(c *gin.Context) {
 
 	accountId := c.Query("accountId")
@@ -77,15 +117,19 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 	callType := c.Query("callType")
 	callResult := c.Query("callResult")
 	sipResponseCode := c.Query("sipResponseCode")
-	rows, err := this.db.Query("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_duration_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code  FROM correlated_cdr_search_v3_vw WHERE (customer_id=? or ? is null) and (unique_record_id=? or ? is null) and (customer_sbc_answer_time=? or ? is null) and (customer_sbc_disconnect_time=? or ? is null) and (customer_sbc_call_duration_in_milliseconds=? or ? is null) and (calling_number=? or ? is null) and (calling_number_type=? or ? is null) and (called_number=? or ? is null) and (called_number_type=? or ? is null) and (call_direction=? or ? is null) and (customer_sbc_post_dial_delay_in_milliseconds=? or ? is null) and (call_type=? or ? is null) and (call_result=? or ? is null) and (sip_response_code=? or ? is null) LIMIT 100",
+	var lteStartTime, gteStartTime, exactStartTime,
+		lteEndTime, gteEndTime, exactEndTime string
+	exactStartTime, lteStartTime, gteStartTime = parseTime(startTime)
+	exactEndTime, lteEndTime, gteEndTime = parseTime(endTime)
+	rows, err := this.db.Query("SELECT unique_record_id, customer_sbc_answer_time, customer_sbc_disconnect_time, customer_sbc_call_duration_in_milliseconds, calling_number, calling_number_type, called_number, called_number_type, call_direction, customer_sbc_post_dial_delay_in_milliseconds, call_type, call_result, sip_response_code  FROM correlated_cdr_search_v3_vw WHERE (customer_id=? or ? is null) and (unique_record_id=? or ? is null) and (customer_sbc_answer_time=? or ? is null) and (customer_sbc_disconnect_time=? or ? is null) and (customer_sbc_call_duration_in_milliseconds=? or ? is null) and (calling_number=? or ? is null) and (calling_number_type=? or ? is null) and (called_number=? or ? is null) and (called_number_type=? or ? is null) and (call_direction=? or ? is null) and (customer_sbc_post_dial_delay_in_milliseconds=? or ? is null) and (call_type=? or ? is null) and (call_result=? or ? is null) and (sip_response_code=? or ? is null) and (customer_sbc_answer_time<=? or ? is null) and (customer_sbc_answer_time>=? or ? is null) and (customer_sbc_disconnect_time<=? or ? is null) and (customer_sbc_disconnect_time>=? or ? is null) LIMIT 100",
 		NewNullString(accountId),
 		NewNullString(accountId),
 		NewNullString(callId),
 		NewNullString(callId),
-		NewNullString(startTime),
-		NewNullString(startTime),
-		NewNullString(endTime),
-		NewNullString(endTime),
+		NewNullString(exactStartTime),
+		NewNullString(exactStartTime),
+		NewNullString(exactEndTime),
+		NewNullString(exactEndTime),
 		NewNullString(duration),
 		NewNullString(duration),
 		NewNullString(callingNumber),
@@ -105,7 +149,16 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 		NewNullString(callResult),
 		NewNullString(callResult),
 		NewNullString(sipResponseCode),
-		NewNullString(sipResponseCode))
+		NewNullString(sipResponseCode),
+		NewNullString(lteStartTime),
+		NewNullString(lteStartTime),
+		NewNullString(gteStartTime),
+		NewNullString(gteStartTime),
+		NewNullString(lteEndTime),
+		NewNullString(lteEndTime),
+		NewNullString(gteEndTime),
+		NewNullString(gteEndTime),
+	)
 	if err != nil {
 		c.String(http.StatusOK, "No Results")
 		log.Fatal(err)
@@ -132,7 +185,7 @@ func (this *DBHandler) getCalls(c *gin.Context) {
 			if sql.ErrNoRows == err {
 				c.String(http.StatusOK, "No Results")
 			} else {
-				c.String(http.StatusBadRequest, "BadRequest")
+				c.String(http.StatusBadRequest, "Bad Request")
 			}
 
 		}
@@ -182,7 +235,7 @@ func (this *DBHandler) getCall(c *gin.Context) {
 		if sql.ErrNoRows == err {
 			c.String(http.StatusOK, "No Results")
 		} else {
-			c.String(http.StatusBadRequest, "BadRequest")
+			c.String(http.StatusBadRequest, "Bad Request")
 		}
 
 	}
